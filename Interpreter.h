@@ -1,0 +1,479 @@
+#pragma once
+
+#include <iostream>
+#include "parser.h"
+#include "Database.h"
+// #include "Relation.h"
+// #include "Tuple.h"
+#include<string>
+#include <cctype>
+#include <iostream>
+#include <vector>
+#include <set>
+#include <map>
+#include "Graph.h"
+#include "Node.h"
+#include <utility>
+
+// #include <stdexcept> 
+// #include <ostream>
+// #include <string>
+// #include <sstream>
+using namespace std;
+
+//make a Database object and make a database class
+
+class interp {
+
+private:
+    c_datalogProgram program;
+    Database database;
+    set<int>set_to_call_and_empty;
+
+public:
+
+    interp() {};
+
+    interp(const c_datalogProgram &program) : program(program) {}
+
+    bool check_constant_or_not(string parameter) {
+        if (parameter[0] == '\'') {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    void grab_set_int(set<int>setforint) {
+        set_to_call_and_empty = setforint;
+    }
+    set<int>return_set_and_then_empty() {
+        return set_to_call_and_empty;
+    }
+    void clear_empty_set(){
+        set_to_call_and_empty.clear();
+    }
+
+    void i_schemes() {
+        //Loop through each of the schemes, 
+        //create a empty relation where the attributes of the relations are the parameters of the schemes, and the name of my relation is the name of my scheme
+        //create an empty relation
+        vector<c_Predicate> schemes = program.v_schemes;
+        //for loop through each scheme and possible name and putting it as a datamember of database
+        for (c_Predicate scheme: schemes) {
+            string name = scheme.name;
+            Scheme header_scheme = Scheme(scheme.parameters);
+            Relation default_relation = Relation(name, header_scheme);
+            database.ADD_Relation(default_relation);
+            //now I have an empty table 
+        }
+    }
+
+
+    void i_facts() {
+        //TUPLES = ROWS
+        //loop through facts and just add them to their appropriate table
+
+        vector<c_Predicate> vi_facts = program.v_facts;
+        // vector <string> sf_parameters = fact.parameters;
+        for (c_Predicate fact: vi_facts) {
+            //get the table
+            string name = fact.name;
+            Relation current_rel = database.GetRelation(name);
+            //looping through each Fact to get the parameters to a string sf= string fact               //get the parameters (attributes) from the fact and add to the tuple object
+            vector<string> sf_parameters = fact.get_Parameters();
+            Tuple temp = Tuple(sf_parameters);
+            //add tuple to the relation
+            current_rel.addTuple(temp);
+            //add the relation back to database
+            database.i_ADD_Relation(current_rel);
+        }
+
+    }
+
+
+    void i_queries() {
+        vector<c_Predicate> queries = program.v_queries;
+        vector<string> parameter_facts;
+
+
+        for (c_Predicate query: queries) {
+            map<string, int> map_keys;
+            vector<string> parameter_Qstrings;
+            string name = query.name;
+            //copy of the relation in the database 
+            Relation current_rel = database.GetRelationCopy(name);
+            vector<int> project_indices;
+            vector<string> renamed_values;
+
+            for (int i = 0; i < query.get_Parameters().size(); i++) {
+                //get all parameters of the query
+                string parameter = query.get_Parameters()[i];
+                parameter_Qstrings.push_back(parameter);
+            }
+            //test for loop for parameters
+            // for(int i = 0; i < parameter_Qstrings.size(); i++) {
+            //     cout << parameter_Qstrings[i] << endl;
+            // }
+            for (int i = 0; i < parameter_Qstrings.size(); i++) {
+                //constant == ' ' or " ", select type 1
+                if (check_constant_or_not(parameter_Qstrings.at(i))) {
+                    current_rel = current_rel.select(i, parameter_Qstrings.at(i));
+                }
+                    //variable
+                else {
+                    if (map_keys.count(parameter_Qstrings.at(i)) == true) {
+                        //if variable == variable (like X == X) 
+                        //then do a select Type 2
+                        current_rel = current_rel.select_2(i, map_keys[parameter_Qstrings.at(i)]);
+                    } else {
+                        //else its a variable like "x and Y"
+                        map_keys[parameter_Qstrings.at(i)] = i;
+                        project_indices.push_back(i);
+                        renamed_values.push_back(parameter_Qstrings.at(i));
+                    }
+                }
+
+            }
+            //mark for project and Rename
+            current_rel = current_rel.project(project_indices);
+            current_rel = current_rel.rename(Scheme(renamed_values));
+
+
+            cout << query.p_toString();
+
+
+            //if relation has tuples then output YES
+            if (current_rel.hasTuples()) {
+                cout << "? Yes(" << current_rel.r_getTuples().size() << ")" << endl;
+                cout << current_rel.new_toString();
+            } else {
+                if (!current_rel.hasTuples()) {
+                    cout << "? No" << endl;
+                } else {
+                    cout << "? Yes(" << current_rel.r_getTuples().size() << ")" << endl;
+                }
+            }
+
+        }
+    }
+
+    void SCC_run(vector<set<int>> V_SCC, vector<int> &project_indices, map<string, int> &map_keys,
+                 vector<string> &renamed_values, vector<c_Rules> v_rules, Graph graph) {
+        //run for loop of SCCs
+        //fixed_point Alg, q1 how to check if any new tuples were added?
+
+
+        //how many times looped
+        int loop_count = 0;
+        int pass_count = 0;
+        int default_val = 0;
+        int grab_node_id;
+        int check = 0;
+        vector<int>check_list_ids;
+
+//        while (changes == true) {
+//            changes = false;
+            for (int r = 0; r < V_SCC.size(); r++) {
+            //this works, correctly chooses how many times it loops through
+                if (r != default_val) {
+                    pass_count = 0;
+                    default_val = r;
+                }
+
+                //local variables for while loop
+                set<int> set_SCC = V_SCC[r];
+                set<int> iterations;
+                set<int>noduplicates;
+
+                //grab for later to print
+                grab_set_int(set_SCC);
+                    cout << "SCC: ";
+                    //print
+
+                int b_size = set_SCC.size();
+                for (auto pair: set_SCC) {
+                    int SCCnodeId = pair;
+                    grab_node_id = pair;
+                    iterations.insert(SCCnodeId);
+                    cout << "R" << SCCnodeId;
+                    if (b_size > 1) {
+                        cout << ",";
+                    }
+                    if (b_size != 0) {
+                        --b_size;
+                    }
+                }
+                cout << endl;
+
+                //end of print
+                bool changes = true;
+                bool break_out_of_loop = false;
+                while (changes == true) {
+                    changes = false;
+                    for (auto pair: set_SCC) {
+
+                        //grab the id where the rule is at
+                        int node_id = pair;
+
+                        //check if the size == 1
+                        if (set_SCC.size()== 1 && graph.check_if_dependent_nodes(node_id) == false) {
+                            break_out_of_loop = true;
+                        }
+
+                        //code copied with slight changes
+                        //holding all body predicate relations
+                        vector<Relation> v_Relation;
+                        Relation joined_relation;
+                        //make a node with each rule
+                        Node node_for_each_ruleID;
+                        node_for_each_ruleID.insert(node_id);
+
+                        //grabbing pair for string
+                        ::pair<string, vector<string>> ruleNames;
+                        c_Rules tempa = v_rules[node_id];
+                        c_Predicate front_head = tempa.get_head();
+                        string front = front_head.name;
+                        ruleNames.first = front;
+
+                        //if Node or ID or SCC has been visited skip and end
+
+
+                        //interpret body predicate
+                        for (c_Predicate BP: v_rules[node_id].bodyPredicates) {
+                            //evaluate BP
+                            project_indices.clear();
+                            map_keys.clear();
+                            renamed_values.clear();
+                            Relation current_rel;
+                            string name = BP.name;
+                            //cout << BP.name;
+                            current_rel = database.GetRelationCopy(name);
+
+
+                            vector<string> getParmaeters = BP.get_Parameters();
+
+                            //grab body predicates and return to pair
+                            ruleNames.second = getParmaeters;
+
+                            for (int i = 0; i < getParmaeters.size(); i++) {
+                                //constant == ' ' or " ", select type 1
+                                if (check_constant_or_not(getParmaeters[i])) {
+                                    current_rel = current_rel.select(i, getParmaeters.at(i));
+                                }
+                                    //variable
+                                else {
+                                    if (map_keys.count(getParmaeters.at(i)) == true) {
+                                        //if variable == variable (like X == X)
+                                        //then do a select Type 2
+                                        current_rel = current_rel.select_2(i, map_keys[getParmaeters.at(i)]);
+                                    } else {
+                                        //else its a variable like "x and Y"
+                                        map_keys[getParmaeters.at(i)] = i;
+                                        project_indices.push_back(i);
+                                        renamed_values.push_back(getParmaeters.at(i));
+                                    }
+                                }
+
+                            }
+                            // cout << "Size of Project Indices " << project_indices.size() << endl;
+                            current_rel = current_rel.project(project_indices);
+                            current_rel = current_rel.rename(Scheme(renamed_values));
+                            // cout << "JOHN (" << current_rel.print_relation() << ")"<< endl;
+
+                            v_Relation.push_back(current_rel);
+
+                        }
+                        //outside of body predicate for loop
+
+
+                        //step 2 join
+
+                        joined_relation = v_Relation[0];
+
+                        //n-1
+                        if (v_Relation.size() >= 2) {
+                            // if(joined_relation.joinable())
+                            for (int j = 1; j < v_Relation.size(); j++) {
+                                joined_relation = joined_relation.join_but_again(v_Relation.at(j));
+                                //cout << "Joined Relation: " << joined_relation.toString() << endl;
+                            }
+                        }
+
+                        //step 3 Project
+                        //mbw step 1 head predicate
+                        //step 2 get the parameters of the head predicate
+                        //step 3 grab string parameters
+                        //step 4 iterate through the scheme vector,
+                        //step 5 compare to head parameters,
+                        //if the same, make a new relation and add it to that relation with everything inside
+
+                        //else continue
+                        vector<int> indexes_parami;
+                        //step 1
+                        c_Predicate head_pred = v_rules[node_id].get_head();
+                        //testing to see head pred name
+                        string head_name = head_pred.name;
+                        // cout << "head pred name " << head_name << endl;
+
+                        //grabbing of the copy of the database without changes
+                        Relation original_rel = database.GetRelationCopy(head_pred.p_getName());
+
+                        set<Tuple> Tuplesof_origin = original_rel.r_getTuples();
+
+
+
+                        //step 2
+                        vector<string> svhp_get_parameters = head_pred.get_Parameters();
+                        Scheme sheme_name = joined_relation.getS();
+                        //step 3
+                        vector<string> v_schemes = sheme_name.getScheme();
+                        //step 4
+                        for (int j = 0; j < svhp_get_parameters.size(); j++) {
+                            for (int i = 0; i < v_schemes.size(); i++) {
+                                // cout << "parameters of svhp " <<  " " <<  v_schemes[i] << endl;
+                                if (svhp_get_parameters[j] == v_schemes[i]) {
+                                    indexes_parami.push_back(i);
+                                    // cout << "indexes" << i <<endl;
+                                }
+                            }
+                        }
+
+                        //make new relation
+                        Relation Projected = joined_relation.project(indexes_parami);
+
+
+                        //step 4 Rename
+                        Scheme rename_name = (head_pred.get_Parameters());
+                        Relation Renamed_Rel = Projected.rename(rename_name);
+                        Scheme OG = original_rel.getS();
+                        //Step 5 Union
+                        Renamed_Rel.setname(head_name);
+                        cout << v_rules[node_id].p_toString() << "." << endl;
+
+                        //check to see if databased changed while printing out the tuples and stuff
+                        bool n_changes = database.ji_ADD_Relation(Renamed_Rel, OG);
+
+
+                        if (n_changes) {
+                            changes = true;
+                        }
+
+
+//                    set<Tuple> tuples_ofnew = Renamed_Rel.r_getTuples();
+
+
+                        loop_count++;
+
+                        check++;
+
+
+                    }
+                    pass_count++;
+                    if(break_out_of_loop) {
+                        break_out_of_loop = false;
+                        break;
+                    }
+                }
+                //print
+                noduplicates = return_set_and_then_empty();
+                // if(changes==false) {
+                clear_empty_set();
+                //print
+                cout << pass_count << " passes: ";
+
+                int size = noduplicates.size();
+                for (auto pair: noduplicates) {
+                    int SCCnodeId = pair;
+                    grab_node_id = pair;
+                    iterations.insert(SCCnodeId);
+                    cout << "R" << SCCnodeId;
+                    if (size > 1) {
+                        cout << ",";
+                    }
+                    if(size != 0) {
+                        --size;
+                    }
+                }
+                cout << endl;
+
+        }
+
+        cout << "Query Evaluation" << endl;
+    }
+
+
+    void eval_Rules(vector<c_Rules> v_rules, vector<int> &project_indices, map<string, int> &map_keys,
+                    vector<string> &renamed_values) {
+        //local variables
+        vector<set<int>> V_SCC;
+        Graph graph = interp::makeGraph(v_rules);
+
+        optimization(graph);
+        cout << "Rule Evaluation" << endl;
+        V_SCC = graph.dfsForest();
+        SCC_run(V_SCC, project_indices, map_keys, renamed_values, v_rules, graph);
+
+
+
+    }
+
+    //interprets rules
+    void i_rules() {
+        vector<c_Rules> v_rules;
+        vector<c_Predicate> v_BP;
+        //grab all rules
+        v_rules = program.v_rules;
+
+        map<string, int> map_keys;
+        vector<int> project_indices;
+        vector<string> renamed_values;
+
+        eval_Rules(v_rules, project_indices, map_keys, renamed_values);
+
+    }
+
+    //print function
+    void optimization(Graph &graph) {
+        cout << "Dependency Graph" << endl;
+        // Graph graph = interp::makeGraph(v_rules);
+        graph.toString();
+        cout << endl;
+    }
+
+    //used to print and run through dfs
+    void opt_2(Graph &graph) {
+        graph.dfsForest();
+        cout << endl << endl;
+    }
+
+
+    //makes graph(what the nodes are connected to adjacently) (reverse and forward made)
+    static Graph makeGraph(const vector<c_Rules> &rules) {
+       
+        Graph graph(rules.size());
+
+        for (int i = 0; i < rules.size(); i++) {
+            c_Rules currentRule1 = rules[i];
+            for (c_Predicate predicate: currentRule1.bp_get_parameters()) {
+                for (int j = 0; j < rules.size(); j++) {
+                    graph.addtonodeid(j);
+                    graph.reverseaddtonodeid(j);
+                    //check if the head of the rule matches the predicate
+                    c_Rules currentRule = rules[j];
+                    c_Predicate rule_head = currentRule.get_head();
+                    //you have a dependency to
+                    //this will help build dependency graph
+                    if (predicate.name == rule_head.name) {
+                        graph.addEdge(i, j);
+                        graph.build_reverse_edges(i, j);
+                    }
+                }
+            }
+        }
+        return graph;
+
+    }
+
+
+};    

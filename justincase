@@ -1,0 +1,374 @@
+#include <map>
+#include "Node.h"
+#include <iostream>
+#include <sstream>
+#include <algorithm>
+#include<stack>
+#pragma once
+
+using namespace std;
+
+
+
+
+
+class Graph {
+
+ private:
+  vector<int> postorder;
+  vector<int> reverse_postorder;
+
+  vector<Node> v_holds_current_nodes;
+
+  map<int,Node> nodes;
+  map<int,Node>reverse_nodes;
+
+ public:
+
+  Graph(){};
+
+  void push_vector_nodes(vector<Node> push) {
+    for(int i = 0; i < push.size(); i++) {
+      v_holds_current_nodes.push_back(push[i]);
+    }
+  }
+
+  void print_reverse_po_vals() {
+    for(int i = 0; i < reverse_postorder.size() - 1; i++) {
+      cout << "PO" << i << ":" << reverse_postorder[i] << endl;
+    }
+  }
+
+  void print_po_vals() {
+    for(int i = 0; i < postorder.size(); i++) {
+      cout << "PO" << i << ":" << postorder[i] << endl;
+    }
+  }
+
+   void grabpostorder_values(vector<int> po_values_need_reverse) {
+    for(int i = 0; i < po_values_need_reverse.size(); ++i ) {
+        postorder.push_back(i);
+    }
+  }
+
+  void grab_reverse_postorder_values(vector<int> po_values_need_reverse) {
+    for(int i = po_values_need_reverse.size() - 1; i >= 0; --i ) {
+        reverse_postorder.push_back(i);
+    }
+  }
+
+    //make reverse graph of Edges
+
+//  //make reverse graph of Edges
+    map<int,Node> reverse_graph(vector<int>& grab_post_order_indices){
+        map<int, Node>reverse_node;
+        for(auto i = nodes.crbegin(); i != nodes.crend(); ++i) {
+//            //  Node use = i->second;
+//            //  cout << i->first << " node id\n";
+//            //  use.G_toString();
+//            //  cout << "Node or rule" << endl;
+//            //  cout << i->first << " -> " << endl;
+            grab_post_order_indices.push_back((i->first));
+            reverse_node.insert({i->first, i->second});
+        }
+        return reverse_node;
+    }
+
+  Graph(int size) {
+    for (int nodeID = 0; nodeID < size; nodeID++)
+      nodes[nodeID] = Node();
+  }
+
+  void addEdge(int fromNodeID, int toNodeID) {
+    nodes[fromNodeID].addEdge(toNodeID);
+  }
+
+  void build_reverse_edges(int toNodeID, int fromNodeID){
+      reverse_nodes[toNodeID].reverse_addEdge(fromNodeID);
+  }
+
+  void toString() {
+    // stringstream result;
+    for (auto& pair : nodes) {
+        int nodeId = pair.first;
+        Node node = pair.second;
+        cout << "R" << nodeId << ":";
+        node.G_toString();
+        cout << endl;
+    }
+    // return result.str();
+  }
+  void toString_forSCC() {
+    // stringstream result;
+    for (auto& pair : nodes) {
+        int nodeId = pair.first;
+        Node node = pair.second;
+        cout << "R" << nodeId << ":";
+        node.G_toString();
+        cout << endl;
+    }
+    // return result.str();
+  }
+
+  void evaluating_scc(){
+    //the first SCC is the Sink
+    //If an SCC has 1 node WITH a loop,
+    //or an SCC has more than 1 node,
+    //we use the fixed-point algorithm on that SCC.
+
+  }
+
+  //DFS FORWARD
+  void dfs_forw(Node x, int access_graph_map, vector<int> reverse_po,
+  int&iterator_val_of_post_order, vector<set<int>>& v_SCC, set<int>& get_SCC) {
+     //mark node visited
+      x.marked();
+      nodes[access_graph_map] = x;
+
+      //set local variables, gets all nodes and gets node_Id's of that one node
+      vector<Node> v_nodes;
+      set<int> adj_nodes = x.adjacentNodeIDs;
+      int grab_node_id;
+      Node grab_node;
+
+
+      //grab the child of the node
+      for (int pair : adj_nodes) {
+          int nodeId = pair;
+          Node node_that_i_want = nodes[nodeId];
+          v_nodes.push_back(node_that_i_want);
+          grab_node_id = nodeId;
+          grab_node = node_that_i_want;
+
+          //check to see if Node has been marked, if not pass through
+          if(!node_that_i_want.get_truth()) {
+              //search for the child of the child, you will go through all adj_nodes and then create SCC
+              dfs_forw(node_that_i_want, nodeId, reverse_po, iterator_val_of_post_order, v_SCC, get_SCC);
+              get_SCC.insert(grab_node_id);
+          }
+
+        }
+        //Make SCC value after end of iteration
+        v_SCC.push_back(get_SCC);
+        get_SCC.clear();
+
+
+
+
+
+
+        //Make SCC value after end of iteration
+        // SCC scc_object;
+        // set<int>adj_list; //= scc_object.get_set();
+        // adj_list = grab_node.adjacentNodeIDs;
+        // scc_object.add_set(adj_list);
+        // v_SCC.push_back(scc_object);
+
+
+    }
+
+    //SCCDFS
+    void real_dfs_forw(Node x, int access_graph_map, vector<set<int>>& v_SCC, set<int>& get_SCC, stack<int>& stack_node_ids) {
+        //mark node visited
+        x.marked();
+        nodes[access_graph_map] = x;
+        get_SCC.insert(access_graph_map);
+
+        //iterate through map to get correct Nodes to us
+        //set local variables, gets all nodes and gets node_Id's of that one node
+        vector<Node> v_nodes;
+        set<int> adj_nodes = x.adjacentNodeIDs;
+        int grab_node_id;
+        if(adj_nodes.size() > 0) {
+        //grab the child of the node
+        for (int pair : adj_nodes) {
+            int nodeId = pair;
+            Node node_that_i_want = nodes[nodeId];
+            v_nodes.push_back(node_that_i_want);
+            //grab Node Indice to know where they are for PO
+            grab_node_id = pair;
+
+            //check to see if Node has been marked, if not pass through
+            if(!node_that_i_want.get_truth()) {
+                //marks for post order of values that have been visited, reverse later in order to do the forward way
+                // get_SCC.insert(access_graph_map);
+                real_dfs_forw(node_that_i_want, nodeId, v_SCC, get_SCC, stack_node_ids);
+            }
+        }
+        }
+        //Make SCC value after end of iteration
+        v_SCC.push_back(get_SCC);
+        get_SCC.clear();
+    }
+
+
+
+
+ //basic DFS
+ //reverse_map
+  void real_dfs(Node x, int access_graph_map, stack<int>& stack_node_ids) {
+      //mark node visited
+      x.marked();
+      nodes[access_graph_map] = x;
+
+      //iterate through map to get correct Nodes to use
+
+      //set local variables, gets all nodes and gets node_Id's of that one node
+      vector<Node> v_nodes;
+      set<int> adj_nodes = x.reverse_adjacent_NodeIDS;
+      int grab_node_id;
+      //grab the child of the node
+      for (int pair : adj_nodes) {
+          int nodeId = pair;
+          Node node_that_i_want = nodes[nodeId];
+          v_nodes.push_back(node_that_i_want);
+          //grab Node Indice to know where they are for PO
+          grab_node_id = pair;
+
+          //check to see if Node has been marked, if not pass through
+          if(node_that_i_want.get_truth() == false) {
+              //marks for post order of values that have been visited, reverse later in order to do the forward way
+              real_dfs(node_that_i_want, nodeId, stack_node_ids);
+          }
+      }
+      stack_node_ids.push(access_graph_map);
+
+  }
+  void dfsForest() {
+      //new local variables
+      vector<int> node_id_post_order;
+      //local variables
+      set<int> get_SCC;
+      vector<set<int>> v_SCC;
+      stack<int> indices_Node_ints;
+      vector<int> iterator_with_nodes_PO;
+      //grab all the nodes
+      vector<Node> v_nodes;
+      vector<int> post_order_values_need_to_reverse;
+      int iterator_value_of_post_order = 1;
+      int new_iterator_value_of_post_order = 1;
+
+      //grabs all Nodes
+      for (auto &pair: nodes) {
+          int nodeId = pair.first;
+          Node node = pair.second;
+          v_nodes.push_back(node);
+      }
+
+      //grab all nodes into private since I'm tired of remaking for loop
+      push_vector_nodes(v_nodes);
+
+      //Need to make a reverse graph
+        map<int,Node> map_reverse_graph = reverse_graph(node_id_post_order);
+//      map<int, Node> map_reverse_graph = nodes;
+
+         //Need to make a reverse graph
+//       grab_reverse_postorder_values(node_id_post_order);
+
+
+      //problem starts here, need to figure out a way to get nodeIDS efficiently and pass it to the map to get Node and use Real_dfs with that Node
+      for (auto pair: nodes) {
+          Node real_node = pair.second;
+          int nodeId = pair.first;
+          if(real_node.get_truth() == false) {
+          real_dfs(real_node, nodeId, indices_Node_ints);
+          }
+     }
+
+
+
+      //Need to reset all nodes to false again, just in case
+      for(Node node: v_nodes) {
+        node.reset_all_nodes_to_false();
+         for(int i = 0; i < v_nodes.size(); i++){
+          nodes[i] = node;
+        }
+      }
+
+
+      //Now DFS again but Forward
+        while(!indices_Node_ints.empty()) {
+          //indices_Node_ints is my stack for all the node Id's
+          int Id_from_lifo =  indices_Node_ints.top();
+          indices_Node_ints.pop();
+          Node node_from_top = nodes[Id_from_lifo];
+           if(!node_from_top.get_truth()) {
+               real_dfs_forw(node_from_top, Id_from_lifo, v_SCC, get_SCC, indices_Node_ints);
+          }
+        }
+      // }
+      //print out SCC
+      cout << "SCC: ";
+      Node node_for_SCC;
+      //iterate through all SCC's
+      for(int j = 0; j < v_SCC.size(); j++){
+        set<int> get_set = v_SCC[j];
+        //grab SCC Node Adj_list to print node
+        for(int pair : get_set) {
+          int SCCnodeId = pair;
+          // cout << "node id " << SCCnodeId << endl;
+          node_for_SCC = nodes[SCCnodeId];
+          node_for_SCC.G_toString();
+          // cout << endl;
+        }
+      }
+
+
+
+  }
+
+  };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//  //basic DFS
+//   void dfs(Node x, int access_graph_map, vector<int>& post_order_values_need_to_reverse,
+//   int& iterator_value_of_post_order, vector<int>& iterator_with_nodes_PO, stack<int>& stack_nodeids_int) {
+//       //mark node visited
+//       x.marked();
+//       nodes[access_graph_map] = x;
+
+//       //set local variables, gets all nodes and gets node_Id's of that one node
+//       vector<Node> v_nodes;
+//       set<int> adj_nodes = x.adjacentNodeIDs;
+//       int grab_node_id;
+//       //grab the child of the node
+//       for (int pair : adj_nodes) {
+//           int nodeId = pair;
+//           Node node_that_i_want = nodes[nodeId];
+//           v_nodes.push_back(node_that_i_want);
+//           //grab Node Indice to know where they are for PO
+//           grab_node_id = pair;
+
+//           //check to see if Node has been marked, if not pass through
+//           if(!node_that_i_want.get_truth()) {
+//               //marks for post order of values that have been visited, reverse later in order to do the forward way
+//               dfs(node_that_i_want, nodeId, post_order_values_need_to_reverse, iterator_value_of_post_order, iterator_with_nodes_PO, stack_nodeids_int);
+//           }
+//       }
+//       stack_nodeids_int.push(grab_node_id);
+//       iterator_with_nodes_PO.push_back(grab_node_id);
+//       post_order_values_need_to_reverse.push_back(iterator_value_of_post_order);
+//       iterator_value_of_post_order++;
+//   }
+
+
+       // for(int i = 0; i < v_nodes.size(); i++) {
+          // dfs(v_nodes[i], i, post_order_values_need_to_reverse,
+          //     iterator_value_of_post_order,iterator_with_nodes_PO, indices_Node_ints);
+      // }
+      //This grabs the post order_values and for some reason reversing them gives us the correct one at this point
+      // grabpostorder_values(post_order_values_need_to_reverse);
+      // grab_reverse_postorder_values(post_order_values_need_to_reverse);
